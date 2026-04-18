@@ -34,7 +34,7 @@ instruments = sorted(
         if "song_instrument" in events_df.columns
         else []
     )
-    + (
+    | set(
         stats_df["instrument"].dropna().unique().tolist()
         if "instrument" in stats_df.columns
         else []
