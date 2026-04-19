@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Yousician Stats Dashboard</title>
+
+  <!-- Chart.js + Annotation -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
+
+  <style>
+    :root {
+      --bg:#0f1216; --panel:#171b20; --text:#e6e8eb;
+      --muted:#9aa3ad; --chip:#222831; --chip-active:#4cc9f0
+    }
+    body { margin:0; font-family:system-ui; background:var(--bg); color:var(--text); }
+    header { padding:16px 24px; background:#0c0f13; border-bottom:1px solid #222; }
+    main { padding:24px; display:grid; gap:24px; }
+
+    .controls, .chart-card {
+      background:var(--panel);
+      border-radius:8px;
+      padding:16px;
+    }
+    .controls {
+      display:flex;
+      gap:16px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    label { font-size:13px; color:var(--muted); }
+    select, input {
+      background:#0c0f13;
+      color:var(--text);
+      border:1px solid #2a2f36;
+      border-radius:6px;
+      padding:6px 10px;
+    }
+
+    .chips { display:flex; gap:8px; flex-wrap:wrap; }
+    .chip {
+      padding:6px 10px;
+      border-radius:999px;
+      background:var(--chip);
+      cursor:pointer;
+      font-size:12px;
+      border:1px solid #2a2f36;
+    }
+    .chip.active {
+      background:var(--chip-active);
+      color:#000;
+      font-weight:600;
+    }
+
+    canvas { max-height:360px; }
+  </style>
+</head>
+
+<body>
+<header><strong>🎸 Yousician Stats Dashboard</strong></header>
+
+<main>
+  <!-- FILTER -->
+  <div class="controls">
+    <label>JSON Datei
+      <input type="file" id="fileInput" accept=".json">
+    </label>
+
+    <label>Y‑Wert
+      <select id="metricSelect">
+        <option value="duration">Duration (min)</option>
+        <option value="stars">Stars</option>
+        <option value="notes">Notes</option>
+        <option value="chords">Chords</option>
+      </select>
+    </label>
+
+    <label>Instrument
+      <select id="instrumentFilter">
+        <option value="guitar" selected>Guitar</option>
+        <option value="piano">Piano</option>
+        <option value="voice">Voice</option>
+        <option value="all">Alle</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- YEAR CHIPS -->
+  <div class="controls">
+    <label>Jahre:</label>
+    <div id="yearChips" class="chips"></div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="chart-card"><canvas id="weeklyChart"></canvas></div>
+  <div class="chart-card"><canvas id="monthlyChart"></canvas></div>
+  <div class="chart-card"><canvas id="yearlyChart"></canvas></div>
+  <div class="chart-card"><canvas id="ytdWeeklyChart"></canvas></div>
+</main>
+
+<script>
+const MONTH_LABELS = [
+  'Jänner','Februar','März','April','Mai','Juni',
+  'Juli','August','September','Oktober','November','Dezember'
+];
+
+let rawData = [];
+let charts = [];
+let activeYears = new Set();
+const colors = ['#4cc9f0','#f72585','#4361ee','#f9c74f','#90dbf4','#ff99c8'];
+
+document.getElementById('fileInput').addEventListener('change', load);
+document.getElementById('metricSelect').addEventListener('change', redraw);
+document.getElementById('instrumentFilter').addEventListener('change', redraw);
+
+/* -------- LOAD -------- */
+function load(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    rawData = JSON.parse(r.result).filter(d => d.stats);
+    setupYearChips();
+    redraw();
+  };
+  r.readAsText(file);
+}
+
+/* -------- YEAR CHIPS -------- */
+function setupYearChips(){
+  const years = [...new Set(rawData.map(d => new Date(d.week).getFullYear()))].sort();
+  const c = document.getElementById('yearChips');
+  c.innerHTML = '';
+  activeYears = new Set(years);
+
+  years.forEach(y => {
+    const chip = document.createElement('div');
+    chip.className = 'chip active';
+    chip.textContent = y;
+    chip.onclick = () => {
+      chip.classList.toggle('active');
+      chip.classList.contains('active') ? activeYears.add(y) : activeYears.delete(y);
+      redraw();
+    };
+    c.appendChild(chip);
+  });
+}
+
+/* -------- REDRAW ALL -------- */
+function redraw(){
+  charts.forEach(c => c.destroy());
+  charts = [];
+
+  const metric = document.getElementById('metricSelect').value;
+  const inst   = document.getElementById('instrumentFilter').value;
+
+  let data = inst === 'all' ? rawData : rawData.filter(d => d.instrument === inst);
+  data = data.filter(d => activeYears.has(new Date(d.week).getFullYear()));
+  if (!data.length) return;
+
+  charts.push(groupedBars('weeklyChart', data, metric, getWeek));
+  charts.push(groupedBars('monthlyChart', data, metric,
+    w => new Date(w).getMonth(), MONTH_LABELS));
+  charts.push(yearlyBars(data, metric));
+  charts.push(ytdWeeklyLine(data, metric));
+}
+
+/* -------- HELPERS -------- */
+function getYear(w){ return new Date(w).getFullYear(); }
+
+function getWeek(w){
+  const d = new Date(w);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const y0 = new Date(d.getFullYear(),0,1);
+  return Math.ceil(((d - y0) / 86400000 + 1) / 7);
+}
+
+function value(d, metric){
+  if (!d.stats || d.stats[metric] == null) return 0;
+  if (metric === 'duration') return (d.stats.duration || 0) / 60; // sec → min
+  return d.stats[metric];
+}
+
+/* -------- BAR CHART (WEEK / MONTH) -------- */
+function groupedBars(id, data, metric, keyFn, forcedLabels=null){
+  const years = [...new Set(data.map(d => getYear(d.week)))].sort();
+  const labels = forcedLabels ?? [...new Set(data.map(d => keyFn(d.week)))].sort((a,b)=>a-b);
+
+  const datasets = years.map((y,i)=>({
+    label:String(y),
+    data: labels.map((lbl,idx)=>{
+      const k = forcedLabels ? idx : lbl;
+      return data
+        .filter(d => getYear(d.week)===y && keyFn(d.week)===k)
+        .reduce((s,d)=>s+value(d,metric),0);
+    }),
+    backgroundColor: colors[i % colors.length]
+  }));
+
+  return new Chart(document.getElementById(id), {
+    type:'bar',
+    data:{ labels, datasets },
+    options:{ responsive:true }
+  });
+}
+
+/* -------- YEAR BAR -------- */
+function yearlyBars(data, metric){
+  const totals = {};
+  data.forEach(d=>{
+    const y = getYear(d.week);
+    totals[y] = (totals[y] || 0) + value(d,metric);
+  });
+
+  return new Chart(document.getElementById('yearlyChart'), {
+    type:'bar',
+    data:{
+      labels:Object.keys(totals),
+      datasets:[{ data:Object.values(totals), backgroundColor:colors }]
+    },
+    options:{ responsive:true }
+  });
+}
+
+/* -------- YTD LINE (WEEKS) -------- */
+function ytdWeeklyLine(data, metric){
+  const byYear = {};
+  data.forEach(d=>{
+    const y = getYear(d.week);
+    const w = getWeek(d.week);
+    byYear[y] ??= {};
+    byYear[y][w] = (byYear[y][w] || 0) + value(d,metric);
+  });
+
+  const maxWeek = 53;
+  const labels = Array.from({length:maxWeek-1},(_,i)=>i+1);
+
+  const datasets = Object.keys(byYear).sort().map((y,i)=>{
+    const acc = new Array(maxWeek).fill(0);
+    Object.entries(byYear[y]).forEach(([w,v]) => acc[w] = v);
+    for (let i=1;i<acc.length;i++) acc[i]+=acc[i-1];
+    return {
+      label:y,
+      data:acc.slice(1),
+      borderColor:colors[i % colors.length],
+      fill:false,
+      tension:0.15
+    };
+  });
+
+  const todayWeek = Math.min(getWeek(new Date()), maxWeek);
+
+  return new Chart(document.getElementById('ytdWeeklyChart'), {
+    type:'line',
+    data:{ labels, datasets },
+    options:{
+      responsive:true,
+      plugins:{
+        annotation:{
+          annotations:{
+            today:{
+              type:'line',
+              xMin:todayWeek,
+              xMax:todayWeek,
+              borderColor:'#ffffff',
+              borderWidth:1
+            }
+          }
+        }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
