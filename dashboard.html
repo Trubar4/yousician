@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Yousician Stats Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+:root {
+  --bg:      #0c0d14;
+  --bg2:     #10121a;
+  --panel:   #14161f;
+  --border:  #1e2133;
+  --accent:  #f5c518;
+  --accent2: #4fc3f7;
+  --text:    #e8e9f2;
+  --muted:   #6b6f88;
+  --ok:      #4caf82;
+  --danger:  #f55858;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;font-size:14px}
+
+/* ── HEADER ── */
+header{
+  background:var(--bg2);
+  border-bottom:2px solid var(--accent);
+  padding:12px 24px;
+  display:flex;align-items:center;gap:14px;
+  position:sticky;top:0;z-index:100;
+}
+.logo{font-size:21px;font-weight:800;letter-spacing:-0.5px;color:#fff}
+.logo em{color:var(--accent);font-style:normal}
+header small{color:var(--muted);font-size:12px}
+
+/* ── LOADER BAR ── */
+.loader-bar{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:10px 24px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;
+}
+.file-btn{
+  display:flex;align-items:center;gap:8px;
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:7px 14px;cursor:pointer;color:var(--text);font-size:13px;
+  transition:border-color .2s;user-select:none;
+}
+.file-btn:hover{border-color:var(--accent)}
+.file-btn.loaded{border-color:var(--ok)}
+.file-btn input[type=file]{display:none}
+.pill{
+  font-size:11px;padding:2px 8px;border-radius:999px;
+  background:var(--border);color:var(--muted);
+}
+.pill.ok{background:rgba(76,175,130,.15);color:var(--ok);border:1px solid var(--ok)}
+
+/* ── TABS ── */
+nav.tabs{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 24px;display:flex;gap:0;overflow-x:auto;
+}
+.tab{
+  padding:13px 20px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500;
+  border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap;
+  transition:color .15s,border-color .15s;
+}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700}
+
+/* ── MAIN ── */
+main{padding:24px;max-width:1400px;margin:0 auto}
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+/* ── CONTROLS ── */
+.controls{
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:14px 18px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;
+  margin-bottom:20px;
+}
+.ctrl{display:flex;flex-direction:column;gap:5px}
+.ctrl label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+select,input[type=text]{
+  background:var(--bg);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:6px 10px;font-size:13px;outline:none;
+  transition:border-color .15s;min-width:130px;
+}
+select:focus,input[type=text]:focus{border-color:var(--accent)}
+
+/* ── CHIPS ── */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{
+  padding:5px 12px;border-radius:999px;border:1px solid var(--border);
+  background:var(--panel);cursor:pointer;font-size:12px;color:var(--muted);
+  transition:all .15s;
+}
+.chip:hover{border-color:var(--accent);color:var(--text)}
+.chip.active{background:rgba(245,197,24,.12);border-color:var(--accent);color:var(--accent);font-weight:700}
+
+/* ── CARDS ── */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}
+.card-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+
+/* ── STAT BOXES ── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px}
+.stat-box{
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:18px 16px;text-align:center;
+}
+.stat-val{font-size:26px;font-weight:800;color:var(--accent);line-height:1.1}
+.stat-lbl{font-size:11px;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.4px}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{
+  padding:9px 12px;color:var(--muted);font-size:11px;text-transform:uppercase;
+  letter-spacing:.4px;border-bottom:1px solid var(--border);
+  white-space:nowrap;font-weight:600;
+}
+tbody td{padding:9px 12px;border-bottom:1px solid rgba(30,33,51,.7)}
+tbody tr:hover td{background:rgba(245,197,24,.03)}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
+.tag-guitar{background:rgba(245,197,24,.14);color:#f5c518}
+.tag-piano{background:rgba(79,195,247,.14);color:#4fc3f7}
+.tag-voice{background:rgba(206,147,216,.14);color:#ce93d8}
+.tag-bass{background:rgba(255,112,67,.14);color:#ff7043}
+.tag-ukulele{background:rgba(129,199,132,.14);color:#81c784}
+
+/* ── PAGINATION ── */
+.tbl-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.pager{display:flex;gap:6px;align-items:center}
+.pager button{
+  padding:4px 11px;border-radius:6px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);cursor:pointer;font-size:12px;
+}
+.pager button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.pager button:disabled{opacity:.35;cursor:default}
+.pager span{font-size:12px;color:var(--muted)}
+
+canvas{max-height:380px}
+
+.empty{text-align:center;padding:48px;color:var(--muted);font-size:13px}
+
+@media(max-width:768px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  nav.tabs{gap:0}
+  .tab{padding:11px 14px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">you<em>sician</em></div>
+  <small>Stats Dashboard</small>
+</header>
+
+<div class="loader-bar">
+  <label class="file-btn" id="btnStats">
+    <span>📊</span> stats.json
+    <input type="file" id="fileStats" accept=".json">
+    <span class="pill" id="pillStats">nicht geladen</span>
+  </label>
+  <label class="file-btn" id="btnSongs">
+    <span>🎵</span> songs.json
+    <input type="file" id="fileSongs" accept=".json">
+    <span class="pill" id="pillSongs">nicht geladen</span>
+  </label>
+</div>
+
+<nav class="tabs">
+  <div class="tab active" data-tab="overview">Übersicht</div>
+  <div class="tab" data-tab="weekly">Übungszeit</div>
+  <div class="tab" data-tab="songs">Songs</div>
+  <div class="tab" data-tab="accuracy">Genauigkeit</div>
+</nav>
+
+<main>
+
+<!-- ── ÜBERSICHT ───────────────────────────────────────────── -->
+<div class="tab-content active" id="tab-overview">
+  <div class="stat-grid">
+    <div class="stat-box"><div class="stat-val" id="oTotalH">—</div><div class="stat-lbl">Übungsstunden</div></div>
+    <div class="stat-box"><div class="stat-val" id="oSongs">—</div><div class="stat-lbl">Songs</div></div>
+    <div class="stat-box"><div class="stat-val" id="oPlays">—</div><div class="stat-lbl">Plays gesamt</div></div>
+    <div class="stat-box"><div class="stat-val" id="oStars">—</div><div class="stat-lbl">Sterne</div></div>
+    <div class="stat-box"><div class="stat-val" id="oNotes">—</div><div class="stat-lbl">Noten gespielt</div></div>
+    <div class="stat-box"><div class="stat-val" id="oAcc">—</div><div class="stat-lbl">Ø Genauigkeit</div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="card-title">Top 10 Songs – Spielzeit (min)</div><canvas id="cTopSongs"></canvas></div>
+    <div class="card"><div class="card-title">Plays nach Instrument</div><canvas id="cInstrDonut"></canvas></div>
+  </div>
+</div>
+
+<!-- ── ÜBUNGSZEIT ─────────────────────────────────────────── -->
+<div class="tab-content" id="tab-weekly">
+  <div class="controls">
+    <div class="ctrl">
+      <label>Metrik</label>
+      <select id="metricSel">
+        <option value="duration">Dauer (min)</option>
+        <option value="stars">Sterne</option>
+        <option value="notes">Noten</option>
+        <option value="chords">Akkorde</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Instrument</label>
+      <select id="instrSel">
+        <option value="guitar">Guitar</option>
+        <option value="piano">Piano</option>
+        <option value="voice">Voice</option>
+        <option value="bass">Bass</option>
+        <option value="ukulele">Ukulele</option>
+        <option value="all">Alle</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Jahre</label>
+      <div id="yearChips" class="chips"></div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Wöchentlich</div><canvas id="cWeekly"></canvas></div>
+  <div class="grid2">
+    <div class="card"><div class="card-title">Monatlich</div><canvas id="cMonthly"></canvas></div>
+    <div class="card"><div class="card-title">Jährlich</div><canvas id="cYearly"></canvas></div>
+  </div>
+  <div class="card"><div class="card-title">YTD – kumulierter Vergleich</div><canvas id="cYtd"></canvas></div>
+</div>
+
+<!-- ── SONGS ──────────────────────────────────────────────── -->
+<div class="tab-content" id="tab-songs">
+  <div class="controls">
+    <div class="ctrl">
+      <label>Instrument</label>
+      <select id="sInstr"><option value="all">Alle</option></select>
+    </div>
+    <div class="ctrl">
+      <label>Sortieren nach</label>
+      <select id="sSort">
+        <option value="plays">Plays</option>
+        <option value="total_min">Minuten gesamt</option>
+        <option value="practice_min">Minuten Üben</option>
+        <option value="avg_accuracy">Genauigkeit</option>
+        <option value="best_score">Bester Score</option>
+        <option value="last_play">Zuletzt gespielt</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <label>Suche</label>
+      <input type="text" id="sSearch" placeholder="Songname…">
+    </div>
+  </div>
+  <div class="card">
+    <div class="tbl-bar">
+      <div class="card-title" style="margin:0"><span id="sSongCount">0</span> Songs</div>
+      <div class="pager" id="sPager"></div>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Song</th><th>Instrument</th>
+          <th class="num">Plays</th><th class="num">Üben (min)</th>
+          <th class="num">Spielen (min)</th><th class="num">Gesamt (min)</th>
+          <th class="num">Ø Genauigkeit</th><th class="num">Bester Score</th>
+          <th>Zuletzt</th>
+        </tr></thead>
+        <tbody id="sTbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Top 20 – Practice vs Play (Minuten)</div>
+    <canvas id="cPvP"></canvas>
+  </div>
+</div>
+
+<!-- ── GENAUIGKEIT ────────────────────────────────────────── -->
+<div class="tab-content" id="tab-accuracy">
+  <div class="controls">
+    <div class="ctrl">
+      <label>Instrument</label>
+      <select id="aInstr"><option value="all">Alle</option></select>
+    </div>
+    <div class="ctrl">
+      <label>Min. Plays</label>
+      <select id="aMinPlays">
+        <option value="1">≥ 1</option>
+        <option value="3" selected>≥ 3</option>
+        <option value="5">≥ 5</option>
+        <option value="10">≥ 10</option>
+      </select>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="card-title">Top 20 – Beste Genauigkeit %</div><canvas id="cAccBest"></canvas></div>
+    <div class="card"><div class="card-title">Top 20 – Höchster Score</div><canvas id="cScore"></canvas></div>
+  </div>
+  <div class="card"><div class="card-title">Genauigkeit vs. Spielhäufigkeit</div><canvas id="cScatter"></canvas></div>
+</div>
+
+</main>
+
+<script>
+// ── Global state ──────────────────────────────────────────────────────────────
+let statsRaw = [], songsRaw = [];
+let weeklyActiveYears = new Set();
+let songPage = 0, songFiltered = [];
+const PAGE = 20;
+
+const C = ['#f5c518','#4fc3f7','#ff7043','#81c784','#ce93d8','#ffb74d','#80cbc4','#f48fb1'];
+const MO = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+Chart.defaults.color = '#6b6f88';
+Chart.defaults.borderColor = '#1e2133';
+
+const _charts = {};
+function mkChart(id, cfg) {
+  if (_charts[id]) _charts[id].destroy();
+  _charts[id] = new Chart(document.getElementById(id), cfg);
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab,.tab-content').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+}));
+
+// ── File loading ──────────────────────────────────────────────────────────────
+function readJSON(inputId, cb) {
+  const file = document.getElementById(inputId).files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => cb(JSON.parse(r.result));
+  r.readAsText(file);
+}
+
+document.getElementById('fileStats').addEventListener('change', () => {
+  readJSON('fileStats', data => {
+    statsRaw = data.filter(d => d.stats);
+    document.getElementById('pillStats').textContent = statsRaw.length + ' Wochen';
+    document.getElementById('pillStats').className = 'pill ok';
+    document.getElementById('btnStats').classList.add('loaded');
+    buildYearChips();
+    drawWeekly();
+    drawOverview();
+  });
+});
+
+document.getElementById('fileSongs').addEventListener('change', () => {
+  readJSON('fileSongs', data => {
+    songsRaw = data;
+    document.getElementById('pillSongs').textContent = songsRaw.length + ' Songs';
+    document.getElementById('pillSongs').className = 'pill ok';
+    document.getElementById('btnSongs').classList.add('loaded');
+    buildInstrDropdowns();
+    renderSongTable();
+    drawPvP();
+    drawAccuracyTab();
+    drawOverview();
+  });
+});
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+function drawOverview() {
+  if (statsRaw.length) {
+    const totalSec = statsRaw.reduce((s, d) => s + (d.stats.duration || 0), 0);
+    document.getElementById('oTotalH').textContent  = (totalSec / 3600).toFixed(0) + 'h';
+    document.getElementById('oStars').textContent   = statsRaw.reduce((s,d)=>s+(d.stats.stars||0),0).toLocaleString();
+    document.getElementById('oNotes').textContent   = (statsRaw.reduce((s,d)=>s+(d.stats.notes||0),0)/1000).toFixed(0)+'k';
+  }
+  if (songsRaw.length) {
+    document.getElementById('oSongs').textContent = songsRaw.length.toLocaleString();
+    document.getElementById('oPlays').textContent = songsRaw.reduce((s,d)=>s+d.plays,0).toLocaleString();
+    const withAcc = songsRaw.filter(d => d.avg_accuracy != null);
+    if (withAcc.length)
+      document.getElementById('oAcc').textContent =
+        (withAcc.reduce((s,d)=>s+d.avg_accuracy,0)/withAcc.length).toFixed(1)+'%';
+
+    const top10 = [...songsRaw].sort((a,b)=>b.total_min-a.total_min).slice(0,10);
+    mkChart('cTopSongs', {
+      type:'bar',
+      data:{
+        labels: top10.map(s => trunc(s.title, 28)),
+        datasets:[{data:top10.map(s=>s.total_min), backgroundColor:C[0], borderRadius:4}]
+      },
+      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b6f88'}},y:{ticks:{color:'#e8e9f2',font:{size:11}}}}}
+    });
+
+    const byI = {};
+    songsRaw.forEach(s => { byI[s.instrument]=(byI[s.instrument]||0)+s.plays; });
+    mkChart('cInstrDonut', {
+      type:'doughnut',
+      data:{labels:Object.keys(byI),datasets:[{data:Object.values(byI),backgroundColor:C,borderWidth:2,borderColor:'#14161f'}]},
+      options:{plugins:{legend:{labels:{color:'#e8e9f2',padding:12}}}}
+    });
+  }
+}
+
+// ── Weekly stats (V7 logic) ───────────────────────────────────────────────────
+function yr(w){ return new Date(w).getFullYear(); }
+function wk(w){
+  const d=new Date(w); d.setHours(0,0,0,0);
+  d.setDate(d.getDate()+4-(d.getDay()||7));
+  return Math.ceil(((d-new Date(d.getFullYear(),0,1))/86400000+1)/7);
+}
+function mval(d,m){
+  if(!d.stats||d.stats[m]==null) return 0;
+  return m==='duration'?(d.stats.duration||0)/60:d.stats[m];
+}
+
+function buildYearChips(){
+  const years=[...new Set(statsRaw.map(d=>yr(d.week)))].sort();
+  weeklyActiveYears=new Set(years);
+  const el=document.getElementById('yearChips');
+  el.innerHTML='';
+  years.forEach(y=>{
+    const c=document.createElement('div');
+    c.className='chip active'; c.textContent=y;
+    c.onclick=()=>{ c.classList.toggle('active'); weeklyActiveYears[c.classList.contains('active')?'add':'delete'](y); drawWeekly(); };
+    el.appendChild(c);
+  });
+}
+
+function drawWeekly(){
+  const m=document.getElementById('metricSel').value;
+  const inst=document.getElementById('instrSel').value;
+  let data=inst==='all'?statsRaw:statsRaw.filter(d=>d.instrument===inst);
+  data=data.filter(d=>weeklyActiveYears.has(yr(d.week)));
+  if(!data.length) return;
+
+  const years=[...new Set(data.map(d=>yr(d.week)))].sort();
+  const axOpts={x:{ticks:{color:'#6b6f88'}},y:{ticks:{color:'#6b6f88'}}};
+  const legOpts={labels:{color:'#e8e9f2'}};
+
+  // weekly grouped bars
+  const wkLabels=[...new Set(data.map(d=>wk(d.week)))].sort((a,b)=>a-b);
+  mkChart('cWeekly',{type:'bar',data:{labels:wkLabels,datasets:years.map((y,i)=>({
+    label:String(y),backgroundColor:C[i%C.length],
+    data:wkLabels.map(w=>data.filter(d=>yr(d.week)===y&&wk(d.week)===w).reduce((s,d)=>s+mval(d,m),0))
+  }))},options:{responsive:true,plugins:{legend:legOpts},scales:axOpts}});
+
+  // monthly grouped bars
+  mkChart('cMonthly',{type:'bar',data:{labels:MO,datasets:years.map((y,i)=>({
+    label:String(y),backgroundColor:C[i%C.length],
+    data:MO.map((_,mo)=>data.filter(d=>yr(d.week)===y&&new Date(d.week).getMonth()===mo).reduce((s,d)=>s+mval(d,m),0))
+  }))},options:{responsive:true,plugins:{legend:legOpts},scales:axOpts}});
+
+  // yearly totals
+  const ytotals={};
+  data.forEach(d=>{const y=yr(d.week);ytotals[y]=(ytotals[y]||0)+mval(d,m);});
+  mkChart('cYearly',{type:'bar',data:{labels:Object.keys(ytotals),datasets:[{data:Object.values(ytotals),backgroundColor:C,borderRadius:4}]},
+    options:{responsive:true,plugins:{legend:{display:false}},scales:axOpts}});
+
+  // YTD cumulative line
+  const byYW={};
+  data.forEach(d=>{const y=yr(d.week),w=wk(d.week);byYW[y]??={};byYW[y][w]=(byYW[y][w]||0)+mval(d,m);});
+  const labels=Array.from({length:52},(_,i)=>i+1);
+  const todayWk=Math.min(wk(new Date()),52);
+  mkChart('cYtd',{type:'line',
+    data:{labels,datasets:Object.keys(byYW).sort().map((y,i)=>{
+      const acc=new Array(53).fill(0);
+      Object.entries(byYW[y]).forEach(([w,v])=>acc[+w]=v);
+      for(let j=1;j<acc.length;j++) acc[j]+=acc[j-1];
+      return{label:y,data:acc.slice(1),borderColor:C[i%C.length],backgroundColor:'transparent',tension:.15,pointRadius:0};
+    })},
+    options:{responsive:true,plugins:{legend:legOpts,
+      annotation:{annotations:{today:{type:'line',xMin:todayWk-1,xMax:todayWk-1,borderColor:'rgba(255,255,255,.2)',borderWidth:1}}}
+    },scales:axOpts}
+  });
+}
+
+document.getElementById('metricSel').addEventListener('change', drawWeekly);
+document.getElementById('instrSel').addEventListener('change', drawWeekly);
+
+// ── Song table ────────────────────────────────────────────────────────────────
+function buildInstrDropdowns(){
+  const instrs=[...new Set(songsRaw.map(s=>s.instrument))].sort();
+  ['sInstr','aInstr'].forEach(id=>{
+    const sel=document.getElementById(id);
+    sel.innerHTML='<option value="all">Alle</option>';
+    instrs.forEach(i=>{
+      const o=document.createElement('option');
+      o.value=i; o.textContent=i.charAt(0).toUpperCase()+i.slice(1);
+      sel.appendChild(o);
+    });
+  });
+}
+
+function instrTag(i){
+  return `<span class="tag tag-${i}">${i}</span>`;
+}
+function trunc(s,n){return s&&s.length>n?s.slice(0,n)+'…':s}
+function fmtN(v,d=1){return v!=null&&v!==''?Number(v).toFixed(d):'—'}
+
+function renderSongTable(){
+  if(!songsRaw.length) return;
+  const instr=document.getElementById('sInstr').value;
+  const sort=document.getElementById('sSort').value;
+  const q=document.getElementById('sSearch').value.toLowerCase();
+
+  songFiltered=songsRaw
+    .filter(s=>(instr==='all'||s.instrument===instr)&&(!q||s.title.toLowerCase().includes(q)))
+    .sort((a,b)=>{
+      const av=a[sort]??'', bv=b[sort]??'';
+      return typeof av==='number'?bv-av:String(bv).localeCompare(String(av));
+    });
+
+  document.getElementById('sSongCount').textContent=songFiltered.length;
+  const total=Math.max(1,Math.ceil(songFiltered.length/PAGE));
+  songPage=Math.min(songPage,total-1);
+  const slice=songFiltered.slice(songPage*PAGE,(songPage+1)*PAGE);
+
+  document.getElementById('sTbody').innerHTML=slice.map((s,i)=>`
+    <tr>
+      <td style="color:var(--muted)">${songPage*PAGE+i+1}</td>
+      <td><strong>${s.title}</strong></td>
+      <td>${instrTag(s.instrument)}</td>
+      <td class="num" style="color:var(--accent);font-weight:700">${s.plays}</td>
+      <td class="num">${fmtN(s.practice_min)}</td>
+      <td class="num">${fmtN(s.play_min)}</td>
+      <td class="num" style="font-weight:600">${fmtN(s.total_min)}</td>
+      <td class="num">${s.avg_accuracy!=null?fmtN(s.avg_accuracy)+'%':'—'}</td>
+      <td class="num">${s.best_score>0?s.best_score.toLocaleString():'—'}</td>
+      <td style="color:var(--muted)">${s.last_play||'—'}</td>
+    </tr>`).join('');
+
+  // pagination
+  const pg=document.getElementById('sPager');
+  pg.innerHTML=`
+    <button onclick="goPage(${songPage-1})" ${songPage===0?'disabled':''}>‹</button>
+    <span>${songPage+1} / ${total}</span>
+    <button onclick="goPage(${songPage+1})" ${songPage>=total-1?'disabled':''}>›</button>`;
+}
+
+window.goPage=p=>{songPage=p;renderSongTable()};
+
+document.getElementById('sInstr').addEventListener('change',()=>{songPage=0;renderSongTable();drawPvP()});
+document.getElementById('sSort').addEventListener('change',()=>{songPage=0;renderSongTable()});
+document.getElementById('sSearch').addEventListener('input',()=>{songPage=0;renderSongTable()});
+
+// ── Practice vs Play chart ────────────────────────────────────────────────────
+function drawPvP(){
+  if(!songsRaw.length) return;
+  const instr=document.getElementById('sInstr').value;
+  const data=[...songsRaw]
+    .filter(s=>instr==='all'||s.instrument===instr)
+    .sort((a,b)=>b.total_min-a.total_min).slice(0,20);
+  mkChart('cPvP',{type:'bar',
+    data:{
+      labels:data.map(s=>trunc(s.title,24)),
+      datasets:[
+        {label:'Üben',data:data.map(s=>s.practice_min),backgroundColor:C[0],borderRadius:3},
+        {label:'Spielen',data:data.map(s=>s.play_min),backgroundColor:C[1],borderRadius:3},
+      ]
+    },
+    options:{indexAxis:'y',responsive:true,
+      plugins:{legend:{labels:{color:'#e8e9f2'}}},
+      scales:{
+        x:{stacked:true,ticks:{color:'#6b6f88'}},
+        y:{stacked:true,ticks:{color:'#e8e9f2',font:{size:11}}}
+      }
+    }
+  });
+}
+
+// ── Accuracy tab ──────────────────────────────────────────────────────────────
+function drawAccuracyTab(){
+  if(!songsRaw.length) return;
+  const instr=document.getElementById('aInstr').value;
+  const minP=parseInt(document.getElementById('aMinPlays').value);
+  const data=songsRaw.filter(s=>s.plays>=minP&&(instr==='all'||s.instrument===instr));
+
+  const topAcc=[...data].filter(s=>s.avg_accuracy!=null).sort((a,b)=>b.avg_accuracy-a.avg_accuracy).slice(0,20);
+  mkChart('cAccBest',{type:'bar',
+    data:{labels:topAcc.map(s=>trunc(s.title,22)),datasets:[{data:topAcc.map(s=>s.avg_accuracy),backgroundColor:'#4caf82',borderRadius:3}]},
+    options:{indexAxis:'y',plugins:{legend:{display:false}},
+      scales:{x:{min:0,max:100,ticks:{color:'#6b6f88'}},y:{ticks:{color:'#e8e9f2',font:{size:11}}}}}
+  });
+
+  const topScore=[...data].sort((a,b)=>b.best_score-a.best_score).slice(0,20);
+  mkChart('cScore',{type:'bar',
+    data:{labels:topScore.map(s=>trunc(s.title,22)),datasets:[{data:topScore.map(s=>s.best_score),backgroundColor:'#ff7043',borderRadius:3}]},
+    options:{indexAxis:'y',plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#6b6f88'}},y:{ticks:{color:'#e8e9f2',font:{size:11}}}}}
+  });
+
+  const scatter=data.filter(s=>s.avg_accuracy!=null)
+    .map(s=>({x:s.plays,y:s.avg_accuracy,t:s.title}));
+  mkChart('cScatter',{type:'scatter',
+    data:{datasets:[{data:scatter,backgroundColor:'rgba(245,197,24,.45)',borderColor:C[0],pointRadius:5}]},
+    options:{responsive:true,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:p=>`${p.raw.t}: ${p.raw.y.toFixed(1)}% (${p.raw.x}×)`}}},
+      scales:{
+        x:{title:{display:true,text:'Plays',color:'#6b6f88'},ticks:{color:'#6b6f88'}},
+        y:{title:{display:true,text:'Genauigkeit %',color:'#6b6f88'},min:0,max:100,ticks:{color:'#6b6f88'}}
+      }
+    }
+  });
+}
+
+document.getElementById('aInstr').addEventListener('change', drawAccuracyTab);
+document.getElementById('aMinPlays').addEventListener('change', drawAccuracyTab);
+</script>
+</body>
+</html>
